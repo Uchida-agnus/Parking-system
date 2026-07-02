@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>駐輪場管理（PC）</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: sans-serif;
+  display: flex;
+  height: 100vh;
+}
+
+#lots {
+  width: 25%;
+  border-right: 1px solid #ddd;
+  overflow-y: auto;
+}
+
+#items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.lot {
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.lot:hover {
+  background: #f0f0f0;
+}
+
+.rack {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.rack:hover {
+  background: #f9f9f9;
+}
+
+.rack.selected {
+  background: #d1ffd6;
+}
+</style>
+</head>
+
+<body>
+
+<div id="lots"></div>
+<div id="items"></div>
+
+<script>
+
+const API = "https://script.google.com/macros/s/AKfycbyATCOMq0fq6BdZL6KS88zgw_nc8Jhu55xW5x7bti2-j-OELC6VhxKjLY9QOWIUIlzB/exec";
+
+let data = [];
+let selected = {
+  continuous: [],
+  longterm: [],
+  closed: []
+};
+
+let mode = "continuous";
+let currentLot = null;
+
+/* 初期読み込み */
+async function init() {
+  data = await getData("data");
+  selected = await getData("selected");
+
+  if (!selected || typeof selected !== "object") {
+    selected = {
+      continuous: [],
+      longterm: [],
+      closed: []
+    };
+  }
+
+  renderLots();
+}
+
+/* データ取得 */
+async function getData(type) {
+  const res = await fetch(`${API}?type=${type}&_=${Date.now()}`);
+  return await res.json();
+}
+
+/* 保存 */
+async function save() {
+  await fetch(API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      type: "selected",
+      data: selected
+    })
+  });
+}
+
+/* 駐輪場グループ化 */
+function groupData() {
+  const map = {};
+  data.forEach(([lot, rack]) => {
+    if (!map[lot]) map[lot] = [];
+    map[lot].push(rack);
+  });
+  return map;
+}
+
+/* 左：駐輪場一覧 */
+function renderLots() {
+  const div = document.getElementById("lots");
+  div.innerHTML = "";
+
+  const map = groupData();
+
+  Object.keys(map).forEach(lot => {
+    const el = document.createElement("div");
+    el.className = "lot";
+    el.innerText = lot;
+
+    el.onclick = () => {
+      currentLot = lot;
+      renderRacks();
+    };
+
+    div.appendChild(el);
+  });
+}
+
+/* 右：ラック一覧 */
+function renderRacks() {
+  const div = document.getElementById("items");
+  div.innerHTML = "";
+
+  if (!currentLot) return;
+
+  const map = groupData();
+  const list = map[currentLot] || [];
+
+  list.forEach(rack => {
+
+    const key = `${currentLot} - ${rack}`;
+
+    const el = document.createElement("div");
+    el.className = "rack";
+
+    if (selected[mode]?.includes(key)) {
+      el.classList.add("selected");
+    }
+
+    el.innerHTML = `
+      <div>${rack}</div>
+      <div>${selected[mode]?.includes(key) ? "✓" : ""}</div>
+    `;
+
+    el.onclick = async () => {
+
+      if (!selected[mode]) selected[mode] = [];
+
+      const index = selected[mode].indexOf(key);
+
+      if (index >= 0) {
+        selected[mode].splice(index, 1);
+      } else {
+        selected[mode].push(key);
+      }
+
+      renderRacks();
+      await save();
+    };
+
+    div.appendChild(el);
+  });
+}
+
+init();
+
+</script>
+
+</body>
+</html>
